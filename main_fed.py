@@ -8,7 +8,7 @@ import matplotlib
 
 from utils.shapley_calculation import shapley_calculation
 
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import copy
 import numpy as np
@@ -27,23 +27,24 @@ if __name__ == '__main__':
     # parse args
     args = args_parser()
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
-    ri_base = [1.2, 0.5, 0.2]   #应该和策略相关，数量越大 成本越高
+    ri_base = [0.3, 0.25, 0.2]  # 应该和策略相关，数量越大 成本越高
     q = 1
     #每个参与者共用一个概率列表 表示选择数量策略的概率
     probabilities = [1/3,1/3,1/3]
     probabilities_dic = [[],[],[]]
     #策略列表表示可选择的三种策略
     strategy = [300,200,100]
-    sigma_1 = 0.003 #控制收敛速度的参数
+    sigma_1 = 0.004 #控制收敛速度的参数
     #记录每个参与者在每一轮次的收益
     u_dict = [[],[],[]]
-    alphe1 = 300
-    alphe2 = 250
-    alphe3 = 0.0001
+    alphe1 = 30000
+    alphe2 = 25000
+    alphe3 = 0.01
     beta1 = 0.0001
     beta2 =0.001
     u_d_list = [] #记录购买者收益
-
+    shapleys_sum_list = []  # 存储每轮的shapleys比例
+    shap = []
 
     # load dataset and split users
     if args.dataset == 'mnist':
@@ -144,7 +145,13 @@ if __name__ == '__main__':
         # 计算当前轮次shapley值---------------------------------
         shapley, v = shapley_calculation(user_data_sizes, dataset_test, args, net_glob, w_glob, w_locals, iter)
         shapleys += shapley
-        print("目前轮次的shapleys值:", shapleys)
+        # 计算shapley比例结果
+        shap_sum = sum(shapleys)
+        shapleys_sum = [i / shap_sum for i in shapleys]
+        shapleys_sum_list.append(shapleys_sum)  # 新增：保存当前轮次的比例
+        shap.append(shapleys)
+        print("目前轮次的shapleys:", shapleys)
+        print("目前轮次的shapleys比例:", shapleys_sum)
         #-----------------------------------------------------
         # update global weights
         w_glob = FedAvg(w_locals, user_data_sizes)
@@ -153,7 +160,7 @@ if __name__ == '__main__':
 
         # 更新计算成本
         for z in range(len(strategy)):
-            ri[z] = round(ri_base[z] * (math.log10(1+ 6 *probabilities[z])) , 8)
+            ri[z] = round(ri_base[z] * (10*probabilities[z])**(1/2) , 8)
         print(ri)
         total_num = sum(user_data_sizes)
         sum_u = [0,0,0] #记录每种策略的总收益
@@ -163,7 +170,7 @@ if __name__ == '__main__':
             every = 0
             for z in range(len(strategy)):
                 #每种策略的shapley可以用决策数量乘概率 / 总数量
-                u_[z] = (shapleys[j] * ((strategy[z]*probabilities[z])/user_data_sizes[j])) * alphe3 * q * v * total_num - ri[z] * (strategy[z]*probabilities[z] ** 2)
+                u_[z] = (shapleys_sum[j] * ((strategy[z]*probabilities[z])/user_data_sizes[j])) * alphe3 * q * v * total_num - ri[z] * (strategy[z]*probabilities[z])
                 sum_u[z] += u_[z]
                 every += probabilities[z] * u_[z]
             every_u[j].append(every)
@@ -210,8 +217,10 @@ if __name__ == '__main__':
         net_glob.train()
 
 
+
+
     # 指定CSV文件的文件名 记录结每个参与者效用结果和平均收益  购买者收益
-    csv_name = "C:/Users/user/PycharmProjects/federated-learning/save/u_i__sigma_{}_acc_{}.csv".format(sigma_1, v)
+    csv_name = "D:/project/PythonProject1/save/u_i__sigma_{}_acc_{}.csv".format(sigma_1, v)
     # 打开文件，使用 'w' 模式表示写入，如果文件不存在会创建新文件，如果存在则覆盖原有内容
     try:
         with open(csv_name, 'w', newline='', encoding='utf-8') as csvfile:
@@ -224,9 +233,87 @@ if __name__ == '__main__':
             writer.writerow([j for j in u_d_list])
     except Exception as e:
         print(f"写入文件时出现错误: {e}")
+    # 设置画布大小
+    plt.figure(figsize=(10, 6))
+
+    # 定义不同参与者的颜色和标签
+    colors = ['#1f77b4', '#2ca02c', '#ff7f0e', '#d62728']  # 颜色!!!
+    labels = [f'参与者{i + 1}' for i in range(4)]  # !!!
+    every_u.append(average_list)
+    # 遍历每个参与者的数据并绘图
+    for i in range(4):  # !!!
+        # x轴为轮次（从1开始），y轴为收益
+        rounds = range(1, len(every_u[i]) + 1)  # 轮次：1,2,...,n
+        earnings = every_u[i]  # 对应参与者的收益列表
+        plt.plot(rounds, earnings,
+                 color=colors[i],
+                 label=labels[i],
+                 marker='o',  # 数据点用圆点标记
+                 markersize=5,
+                 linewidth=2)
+
+    # 添加图表细节
+    plt.xlabel('轮次', fontsize=12)
+    plt.ylabel('收益', fontsize=12)
+    plt.title('各参与者每轮收益变化', fontsize=14)
+    plt.legend(fontsize=10)  # 显示图例（区分参与者）
+    plt.grid(linestyle='--', alpha=0.6)  # 显示网格线
+    plt.xticks(rounds)  # x轴刻度与轮次一一对应
+
+    # 显示图像
+    plt.show()
+
+    #模型购买者图像
+    # 创建画布
+    plt.figure(figsize=(10, 6))
+
+    # 绘制线型图（x轴为索引/序号，y轴为 u_d_list 的值）
+    plt.plot(u_d_list,
+             color='blue',  # 线条颜色
+             marker='o',  # 数据点标记
+             markersize=5,  # 标记大小
+             linewidth=2)  # 线条宽度
+
+    # 添加标签和标题
+    plt.xlabel('轮次', fontsize=12)
+    plt.ylabel('收益', fontsize=12)
+    plt.title('model buyer shouyi', fontsize=14)
+    plt.grid(linestyle='--', alpha=0.7)  # 网格线
+
+    # 显示图像
+    plt.show()
+
+    # 绘制三种策略的总收益趋势图
+    plt.figure(figsize=(10, 6))
+
+    # 定义策略的颜色和标签
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c']  # 蓝色、橙色、绿色，与策略比例图保持一致
+    labels = [f'策略{i + 1}（数量{strategy[i]}）' for i in range(3)]  # 标签包含策略数量
+
+    # 遍历三种策略的总收益数据
+    for i in range(3):
+        rounds = range(1, len(u_dict[i]) + 1)  # 轮次从1开始
+        plt.plot(rounds, u_dict[i],
+                 color=colors[i],
+                 label=labels[i],
+                 linewidth=2,
+                 marker='o',
+                 markersize=5)
+
+    # 添加图表细节
+    plt.xlabel('轮次', fontsize=12)
+    plt.ylabel('总收益', fontsize=12)
+    plt.title('三种策略的总收益变化趋势', fontsize=14)
+    plt.legend(fontsize=10)  # 显示图例区分不同策略
+    plt.grid(linestyle='--', alpha=0.6)  # 网格线
+    plt.xticks(rounds)  # x轴刻度与轮次对应
+    plt.tight_layout()  # 自动调整布局
+
+    # 显示图像
+    plt.show()
 
     # 指定CSV文件的文件名 记录probabilities和数量变化
-    csv_name = "C:/Users/user/PycharmProjects/federated-learning/save/probabilities__sigma_{}_acc_{}.csv".format(sigma_1, v)
+    csv_name = "D:/project/PythonProject1/save/probabilities__sigma_{}_ri_base_{}.csv".format(sigma_1, ri_base)
     # 打开文件，使用 'w' 模式表示写入，如果文件不存在会创建新文件，如果存在则覆盖原有内容
     try:
           with open(csv_name, 'w', newline='', encoding='utf-8') as csvfile:
@@ -237,8 +324,37 @@ if __name__ == '__main__':
                   writer.writerow([j for j in all_num[i]])
     except Exception as e:
         print(f"写入文件时出现错误: {e}")
+    # 设置画布大小
+    plt.figure(figsize=(10, 6))
 
-    print(all_num)
+    # 定义不同策略的颜色和标签
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c']  # 蓝色、橙色、绿色（可自定义）
+    labels = [f'策略{i + 1}' for i in range(3)]
+
+    # 绘制每条策略的曲线
+    for i in range(3):
+        # x轴为轮次（从1开始），y轴为比例
+        rounds = range(1, len(probabilities_dic[i]) + 1)
+        plt.plot(rounds, probabilities_dic[i],
+                 color=colors[i],
+                 label=labels[i],
+                 linewidth=2,  # 线宽
+                 marker='o',  # 数据点标记
+                 markersize=5,  # 标记大小
+                 alpha=0.8)  # 透明度
+
+    # 添加图表信息
+    plt.xlabel('轮次', fontsize=12)
+    plt.ylabel('策略比例', fontsize=12)
+    plt.title('各策略在所有轮次中的比例变化', fontsize=14)
+    plt.legend(fontsize=10)  # 显示图例
+    plt.grid(linestyle='--', alpha=0.5)  # 网格线
+    plt.ylim(0, 1.05)  # 比例范围限制在0-1.05（确保比例显示完整）
+    plt.tight_layout()  # 自动调整布局
+
+    # 显示图像
+    plt.show()
+    #print(all_num)
     '''# 画出参与者最佳提供量趋势
     p1 = []
     p2 = []
@@ -270,3 +386,43 @@ if __name__ == '__main__':
     plt.savefig('./save/test_accuracy.png')'''
     print(net_glob)
     # testing
+
+    # 绘制shapleys比例趋势图
+    plt.figure(figsize=(10, 6))
+    colors = ['#1f77b4', '#2ca02c', '#ff7f0e']  # 颜色'#d62728'!!!
+    labels = [f'参与者{i + 1}' for i in range(3)]  # !!!
+
+    # 遍历每个参与者的shapleys比例数据
+    for i in range(3):#!!!
+        # 提取每轮中第i个参与者的比例
+        values = [round(ss[i], 4) for ss in shapleys_sum_list]
+        rounds = range(1, len(values) + 1)
+        plt.plot(rounds, values,
+                 color=colors[i],
+                 label=labels[i],
+                 marker='s',  # 用正方形标记
+                 markersize=5,
+                 linewidth=2)
+
+    plt.xlabel('轮次', fontsize=12)
+    plt.ylabel('Shapley值比例', fontsize=12)
+    plt.title('各参与者Shapley值比例变化趋势', fontsize=14)
+    plt.legend(fontsize=10)
+    plt.grid(linestyle='--', alpha=0.6)
+    plt.xticks(rounds)
+    plt.ylim(0, 1.0)  # 比例范围限制在0-1之间
+    plt.show()
+    # 指定CSV文件的文件名 记录shap
+    csv_name = "D:/project/PythonProject1/save/shap__sigma_{}_acc_{}.csv".format(sigma_1, v)
+    # 打开文件，使用 'w' 模式表示写入，如果文件不存在会创建新文件，如果存在则覆盖原有内容
+    try:
+        with open(csv_name, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            for i in range(3):
+                writer.writerow([round(ss[i], 4) for ss in shapleys_sum_list])
+            for i in range(3):
+                writer.writerow([round(ss[i], 4) for ss in shap])
+    except Exception as e:
+        print(f"写入文件时出现错误: {e}")
+
+

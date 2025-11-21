@@ -53,7 +53,7 @@ def shapley_calculation(user_data_sizes,datatest,args,net_glob,w_glob,w_locals,c
 
 
     # 指定CSV文件的文件名
-    csv_name = "C:/Users/user/PycharmProjects/federated-learning/save/shapley_values/fed_{}.csv".format(count)
+    '''csv_name = "D:/project/PythonProject1/save/shapley_values/fed_{}.csv".format(count)
     # 打开文件，使用 'w' 模式表示写入，如果文件不存在会创建新文件，如果存在则覆盖原有内容
     try:
         with open(csv_name, 'w', newline='', encoding='utf-8') as csvfile:
@@ -64,7 +64,7 @@ def shapley_calculation(user_data_sizes,datatest,args,net_glob,w_glob,w_locals,c
                 writer.writerow([round(i,2) for i in final_shap[i]])
             writer.writerow([round(i/len(permutations_list),2) for i in shapleys])
     except Exception as e:
-        print(f"写入文件时出现错误: {e}")
+        print(f"写入文件时出现错误: {e}")'''
 
     shapleys = [i /len(permutations_list) for i in shapleys]
     return shapleys, v_new.item()

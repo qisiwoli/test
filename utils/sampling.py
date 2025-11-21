@@ -15,6 +15,7 @@ def mnist_iid(dataset, num_users):
     :return: dict of image index
     """
     num_items = int(len(dataset)/num_users)
+    #总数量为60000
     dict_users, all_idxs = {}, [i for i in range(len(dataset))]
     for i in range(num_users):
         #从数据集中随机选择num_items个样本，且不重复
@@ -72,6 +73,7 @@ def cifar_iid(dataset, num_users):
         dict_users[i] = set(np.random.choice(all_idxs, num_items, replace=False))
         all_idxs = list(set(all_idxs) - dict_users[i])
     return dict_users
+
 
 
 if __name__ == '__main__':
